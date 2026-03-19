@@ -1,0 +1,11 @@
+{
+  "name": "reps-contact",
+  "compatibility_date": "2025-01-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reps-contact",
+      "database_id": "placeholder-will-be-set-after-create"
+    }
+  ]
+}

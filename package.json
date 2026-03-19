@@ -1,0 +1,32 @@
+{
+  "name": "repscontact",
+  "version": "1.0.0",
+  "description": "Find and contact your US congressional representatives",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "license": "MIT",
+  "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^13.1.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "astro": "^6.0.7",
+    "tailwindcss": "^4.2.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "tsx": "^4.21.0",
+    "wrangler": "^4.75.0"
+  }
+}
