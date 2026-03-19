@@ -5,7 +5,7 @@ Find and contact your US congressional representatives.
 ## Stack
 
 - **Framework**: Astro (hybrid SSR + static) with `@astrojs/cloudflare` adapter
-- **Hosting**: Cloudflare Pages (GitHub-triggered deploy, NOT wrangler deploy)
+- **Hosting**: Cloudflare Workers (deployed via `wrangler deploy`)
 - **Database**: Cloudflare D1
 - **Package manager**: pnpm
 - **Styling**: Tailwind CSS
@@ -21,15 +21,21 @@ pnpm test            # run tests
 
 ## Deployment
 
-Cloudflare Pages is configured to deploy automatically on push to `main` via GitHub integration.
-Do NOT deploy via `wrangler deploy` or GitHub Actions — Cloudflare's built-in GitHub trigger handles it.
+@astrojs/cloudflare v13+ targets Cloudflare Workers (not Pages). Deploy with:
+
+```bash
+pnpm build
+npx wrangler deploy --config dist/server/wrangler.json
+```
+
+Live URL: https://reps-contact.option-zero.workers.dev
 
 ## Architecture
 
 - `src/pages/` — Astro pages (landing page, API routes)
 - `src/components/` — UI components (rep cards, zip lookup form, embed widget)
 - `src/lib/` — Data fetching, geocoding, district lookup logic
-- `src/data/` — Static data files, migration scripts
+- `scripts/` — Data seeding scripts
 - `d1-schema/` — D1 database migrations
 - `public/` — Static assets (headshots, etc.)
 

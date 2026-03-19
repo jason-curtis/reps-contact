@@ -1,7 +1,15 @@
 (function () {
   "use strict";
 
+  // Auto-detect API base from script src, fallback to production
+  var scripts = document.querySelectorAll("script[src]");
   var API_BASE = "https://reps-contact.pages.dev";
+  for (var i = 0; i < scripts.length; i++) {
+    if (scripts[i].src.indexOf("embed.js") !== -1) {
+      API_BASE = scripts[i].src.replace(/\/embed\.js.*$/, "");
+      break;
+    }
+  }
   var containers = document.querySelectorAll("[data-reps-contact]");
 
   containers.forEach(function (container) {

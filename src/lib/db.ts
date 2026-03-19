@@ -4,7 +4,6 @@ export async function getRepsByZip(
   db: D1Database,
   zip: string
 ): Promise<LookupResult> {
-  // Find districts for this zip
   const districts = await db
     .prepare("SELECT state, district, ratio FROM zip_districts WHERE zip = ?")
     .bind(zip)
@@ -20,7 +19,7 @@ export async function getRepsByZip(
   }));
   const ambiguous = districtList.length > 1;
 
-  // Get senators for the state(s)
+  // Get senators for the state(s) — deduplicated
   const states = [...new Set(districtList.map((d) => d.state))];
   const statePlaceholders = states.map(() => "?").join(",");
 
@@ -31,21 +30,22 @@ export async function getRepsByZip(
     .bind(...states)
     .all<Representative>();
 
-  // Get house reps for each district
-  const reps: Representative[] = [];
-  for (const d of districtList) {
-    const result = await db
-      .prepare(
-        `SELECT * FROM representatives WHERE type = 'rep' AND state = ? AND district = ? AND (end_date IS NULL OR end_date > date('now'))`
-      )
-      .bind(d.state, d.district)
-      .all<Representative>();
-    reps.push(...result.results);
-  }
+  // Build district conditions for batch query
+  const districtConditions = districtList
+    .map(() => "(state = ? AND district = ?)")
+    .join(" OR ");
+  const districtParams = districtList.flatMap((d) => [d.state, d.district]);
+
+  const houseReps = await db
+    .prepare(
+      `SELECT * FROM representatives WHERE type = 'rep' AND (${districtConditions}) AND (end_date IS NULL OR end_date > date('now'))`
+    )
+    .bind(...districtParams)
+    .all<Representative>();
 
   return {
     zip,
-    representatives: [...senators.results, ...reps],
+    representatives: [...senators.results, ...houseReps.results],
     ambiguous,
     districts: districtList,
   };
@@ -56,69 +56,69 @@ export async function getRepsByLatLng(
   lat: number,
   lng: number
 ): Promise<LookupResult> {
-  // Use Census Geocoder to find congressional district
   const url = `https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lng}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
 
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+
   if (!response.ok) {
     throw new Error(`Census geocoder returned ${response.status}`);
   }
 
   const data = (await response.json()) as {
     result?: {
-      geographies?: {
-        "118th Congressional Districts"?: Array<{
-          STATE: string;
-          CD118: string;
-          BASENAME: string;
-        }>;
-        "119th Congressional Districts"?: Array<{
-          STATE: string;
-          CD119: string;
-          BASENAME: string;
-        }>;
-      };
+      geographies?: Record<
+        string,
+        Array<{ STATE: string; BASENAME: string; [key: string]: string }>
+      >;
     };
   };
 
-  const congressionalDistricts =
-    data.result?.geographies?.["119th Congressional Districts"] ??
-    data.result?.geographies?.["118th Congressional Districts"];
+  // Find congressional district data — try 119th first, then 118th
+  const geos = data.result?.geographies;
+  const cdKey = geos
+    ? Object.keys(geos).find((k) => /Congressional Districts/i.test(k))
+    : undefined;
+  const congressionalDistricts = cdKey ? geos![cdKey] : undefined;
 
   if (!congressionalDistricts?.length) {
-    return {
-      zip: "",
-      representatives: [],
-      ambiguous: false,
-      districts: [],
-    };
+    return { zip: "", representatives: [], ambiguous: false, districts: [] };
   }
 
   const cd = congressionalDistricts[0];
   const stateFips = cd.STATE;
-  const districtNum = parseInt(cd.CD119 ?? cd.CD118 ?? cd.BASENAME, 10);
+  // Try CD119, CD118, or BASENAME for district number
+  const districtStr =
+    Object.entries(cd).find(([k]) => /^CD\d+$/.test(k))?.[1] ?? cd.BASENAME;
+  const districtNum = parseInt(districtStr, 10);
 
-  // Convert FIPS to state abbreviation
   const stateAbbr = fipsToState(stateFips);
-  if (!stateAbbr) {
+  if (!stateAbbr || isNaN(districtNum)) {
     return { zip: "", representatives: [], ambiguous: false, districts: [] };
   }
 
-  // Get senators
-  const senators = await db
-    .prepare(
-      `SELECT * FROM representatives WHERE type = 'sen' AND state = ? AND (end_date IS NULL OR end_date > date('now'))`
-    )
-    .bind(stateAbbr)
-    .all<Representative>();
-
-  // Get house rep
-  const houseReps = await db
-    .prepare(
-      `SELECT * FROM representatives WHERE type = 'rep' AND state = ? AND district = ? AND (end_date IS NULL OR end_date > date('now'))`
-    )
-    .bind(stateAbbr, districtNum)
-    .all<Representative>();
+  // Batch query — senators and house rep together
+  const [senators, houseReps] = await Promise.all([
+    db
+      .prepare(
+        `SELECT * FROM representatives WHERE type = 'sen' AND state = ? AND (end_date IS NULL OR end_date > date('now'))`
+      )
+      .bind(stateAbbr)
+      .all<Representative>(),
+    db
+      .prepare(
+        `SELECT * FROM representatives WHERE type = 'rep' AND state = ? AND district = ? AND (end_date IS NULL OR end_date > date('now'))`
+      )
+      .bind(stateAbbr, districtNum)
+      .all<Representative>(),
+  ]);
 
   return {
     zip: "",
@@ -139,7 +139,6 @@ export async function getRepById(
   return result ?? null;
 }
 
-// FIPS state codes to abbreviations
 const FIPS_MAP: Record<string, string> = {
   "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA",
   "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
