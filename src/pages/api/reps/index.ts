@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { getRepsByZip, getRepsByLatLng } from "../../../lib/db";
+import { getRepsByZip, getRepsByLatLng, getRepsByAddress } from "../../../lib/db";
 
 const CORS_HEADERS = {
   "Content-Type": "application/json",
@@ -14,6 +14,7 @@ export const GET: APIRoute = async ({ request }) => {
   const zip = url.searchParams.get("zip");
   const lat = url.searchParams.get("lat");
   const lng = url.searchParams.get("lng");
+  const address = url.searchParams.get("address");
 
   const db = (env as unknown as { DB: D1Database }).DB;
 
@@ -49,9 +50,21 @@ export const GET: APIRoute = async ({ request }) => {
       return new Response(JSON.stringify(result), { headers: CORS_HEADERS });
     }
 
+    if (address) {
+      if (address.trim().length < 5) {
+        return new Response(
+          JSON.stringify({ error: "Address is too short." }),
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+      const result = await getRepsByAddress(db, address.trim());
+      return new Response(JSON.stringify(result), { headers: CORS_HEADERS });
+    }
+
     return new Response(
       JSON.stringify({
-        error: "Provide ?zip=XXXXX or ?lat=XX&lng=XX query parameters.",
+        error:
+          "Provide ?zip=XXXXX, ?lat=XX&lng=XX, or ?address=... query parameters.",
       }),
       { status: 400, headers: CORS_HEADERS }
     );

@@ -128,6 +128,88 @@ export async function getRepsByLatLng(
   };
 }
 
+export async function getRepsByAddress(
+  db: D1Database,
+  address: string
+): Promise<LookupResult> {
+  const url = `https://geocoding.geo.census.gov/geocoder/geographies/address?onelineaddress=${encodeURIComponent(address)}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Census geocoder returned ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    result?: {
+      addressMatches?: Array<{
+        coordinates?: { x: number; y: number };
+        geographies?: Record<
+          string,
+          Array<{ STATE: string; BASENAME: string; [key: string]: string }>
+        >;
+      }>;
+    };
+  };
+
+  const match = data.result?.addressMatches?.[0];
+  if (!match) {
+    return { zip: "", representatives: [], ambiguous: false, districts: [] };
+  }
+
+  // Extract congressional district from geographies
+  const geos = match.geographies;
+  const cdKey = geos
+    ? Object.keys(geos).find((k) => /Congressional Districts/i.test(k))
+    : undefined;
+  const congressionalDistricts = cdKey ? geos![cdKey] : undefined;
+
+  if (!congressionalDistricts?.length) {
+    return { zip: "", representatives: [], ambiguous: false, districts: [] };
+  }
+
+  const cd = congressionalDistricts[0];
+  const stateFips = cd.STATE;
+  const districtStr =
+    Object.entries(cd).find(([k]) => /^CD\d+$/.test(k))?.[1] ?? cd.BASENAME;
+  const districtNum = parseInt(districtStr, 10);
+
+  const stateAbbr = fipsToState(stateFips);
+  if (!stateAbbr || isNaN(districtNum)) {
+    return { zip: "", representatives: [], ambiguous: false, districts: [] };
+  }
+
+  const [senators, houseReps] = await Promise.all([
+    db
+      .prepare(
+        `SELECT * FROM representatives WHERE type = 'sen' AND state = ? AND (end_date IS NULL OR end_date > date('now'))`
+      )
+      .bind(stateAbbr)
+      .all<Representative>(),
+    db
+      .prepare(
+        `SELECT * FROM representatives WHERE type = 'rep' AND state = ? AND district = ? AND (end_date IS NULL OR end_date > date('now'))`
+      )
+      .bind(stateAbbr, districtNum)
+      .all<Representative>(),
+  ]);
+
+  return {
+    zip: "",
+    representatives: [...senators.results, ...houseReps.results],
+    ambiguous: false,
+    districts: [{ state: stateAbbr, district: districtNum }],
+  };
+}
+
 export async function getRepById(
   db: D1Database,
   bioguideId: string
