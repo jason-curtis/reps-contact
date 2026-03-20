@@ -8,8 +8,9 @@
  *   wrangler d1 execute reps-contact --file=d1-schema/seed-zip-districts.sql
  */
 
-import { writeFileSync } from "fs";
+import { writeFileSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
+import { join, dirname } from "path";
 
 function curlFetch(url: string): string {
   return execSync(`curl -sL "${url}"`, {
@@ -119,6 +120,81 @@ const FIPS_TO_STATE: Record<string, string> = {
   "78": "VI",
 };
 
+interface BundleRep {
+  type: "sen" | "rep";
+  first_name: string;
+  last_name: string;
+  party: string;
+  state: string;
+  district: number | null;
+  phone: string | null;
+  url: string | null;
+  contact_form: string | null;
+  photo_url: string;
+  office: string | null;
+}
+
+function generateBundle() {
+  console.log("\nGenerating client-side bundle...");
+
+  // Fetch legislators
+  const legRaw = curlFetch(
+    "https://raw.githubusercontent.com/unitedstates/congress-legislators/gh-pages/legislators-current.json"
+  );
+  const legislators: Legislator[] = JSON.parse(legRaw);
+
+  const reps: Record<string, BundleRep> = {};
+  for (const leg of legislators) {
+    const term = leg.terms[leg.terms.length - 1];
+    if (!term) continue;
+    const bioguide = leg.id.bioguide;
+    reps[bioguide] = {
+      type: term.type,
+      first_name: leg.name.first,
+      last_name: leg.name.last,
+      party: term.party,
+      state: term.state,
+      district: term.district ?? null,
+      phone: term.phone ?? null,
+      url: term.url ?? null,
+      contact_form: term.contact_form ?? null,
+      photo_url: `https://theunitedstates.io/images/congress/225x275/${bioguide}.jpg`,
+      office: term.office ?? null,
+    };
+  }
+
+  // Fetch zip-to-district mappings
+  const csvText = curlFetch(
+    "https://raw.githubusercontent.com/OpenSourceActivismTech/us-zipcodes-congress/refs/heads/master/zccd.csv"
+  );
+  const lines = csvText.trim().split("\n");
+  const zips: Record<string, [string, number][]> = {};
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const parts = line.split(",");
+    if (parts.length < 4) continue;
+    const stateAbbr = parts[1].trim();
+    const zip = parts[2].trim();
+    const district = parseInt(parts[3].trim(), 10);
+    if (!stateAbbr || !zip || zip.length !== 5 || isNaN(district)) continue;
+
+    if (!zips[zip]) zips[zip] = [];
+    zips[zip].push([stateAbbr, district]);
+  }
+
+  const bundle = {
+    generatedAt: new Date().toISOString(),
+    reps,
+    zips,
+  };
+
+  const outPath = join("public", "reps-bundle.json");
+  writeFileSync(outPath, JSON.stringify(bundle));
+  console.log(`Wrote ${outPath} (${Object.keys(reps).length} reps, ${Object.keys(zips).length} zips)`);
+}
+
 function main() {
   const legislatorsSql = generateLegislatorsSql();
   writeFileSync("d1-schema/seed-legislators.sql", legislatorsSql);
@@ -127,6 +203,8 @@ function main() {
   const zipSql = generateZipDistrictsSql();
   writeFileSync("d1-schema/seed-zip-districts.sql", zipSql);
   console.log("Wrote d1-schema/seed-zip-districts.sql");
+
+  generateBundle();
 
   console.log("\nTo apply to D1:");
   console.log(

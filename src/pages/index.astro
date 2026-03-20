@@ -98,16 +98,124 @@ import Layout from "../layouts/Layout.astro";
 
   let currentZip = "";
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const zip = input.value.trim();
-    if (!/^\d{5}$/.test(zip)) {
-      showError("Please enter a valid 5-digit zip code.");
-      return;
+  // --- Bundle types ---
+  interface BundleRep {
+    type: "sen" | "rep";
+    first_name: string;
+    last_name: string;
+    party: string;
+    state: string;
+    district: number | null;
+    phone: string | null;
+    url: string | null;
+    contact_form: string | null;
+    photo_url: string;
+    office: string | null;
+  }
+
+  interface Bundle {
+    generatedAt: string;
+    reps: Record<string, BundleRep>;
+    zips: Record<string, [string, number][]>;
+  }
+
+  // --- Lazy bundle loading ---
+  let bundle: Bundle | null = null;
+  let bundleError = false;
+
+  const bundleReady: Promise<Bundle | null> = fetch("/reps-bundle.json")
+    .then((res) => {
+      if (!res.ok) throw new Error(`Bundle fetch failed: ${res.status}`);
+      return res.json() as Promise<Bundle>;
+    })
+    .then((data) => {
+      bundle = data;
+      // Staleness check
+      const age = Date.now() - new Date(data.generatedAt).getTime();
+      if (age > 30 * 24 * 60 * 60 * 1000) {
+        console.warn("reps-bundle.json is older than 30 days — data may be stale");
+      }
+      return data;
+    })
+    .catch((err) => {
+      console.error("Failed to load reps bundle:", err);
+      bundleError = true;
+      return null;
+    });
+
+  // --- Build lookup indexes from bundle ---
+  function buildIndexes(b: Bundle) {
+    const senatorsByState = new Map<string, (BundleRep & { bioguide_id: string })[]>();
+    const repsByDistrict = new Map<string, (BundleRep & { bioguide_id: string })[]>();
+
+    for (const [id, rep] of Object.entries(b.reps)) {
+      const entry = { ...rep, bioguide_id: id };
+      if (rep.type === "sen") {
+        const arr = senatorsByState.get(rep.state) || [];
+        arr.push(entry);
+        senatorsByState.set(rep.state, arr);
+      } else {
+        const key = `${rep.state}-${rep.district}`;
+        const arr = repsByDistrict.get(key) || [];
+        arr.push(entry);
+        repsByDistrict.set(key, arr);
+      }
     }
 
+    return { senatorsByState, repsByDistrict };
+  }
+
+  // --- Zip lookup from bundle ---
+  function lookupZip(b: Bundle, zip: string): { reps: Rep[]; ambiguous: boolean } {
+    const entries = b.zips[zip];
+    if (!entries || entries.length === 0) return { reps: [], ambiguous: false };
+
+    const { senatorsByState, repsByDistrict } = buildIndexes(b);
+    const ambiguous = entries.length > 1;
+    const seen = new Set<string>();
+    const reps: Rep[] = [];
+
+    for (const [state, district] of entries) {
+      // Add senators for this state (dedupe across entries)
+      for (const sen of senatorsByState.get(state) || []) {
+        if (!seen.has(sen.bioguide_id)) {
+          seen.add(sen.bioguide_id);
+          reps.push(bundleRepToRep(sen));
+        }
+      }
+      // Add house rep for this district
+      const key = `${state}-${district}`;
+      for (const hr of repsByDistrict.get(key) || []) {
+        if (!seen.has(hr.bioguide_id)) {
+          seen.add(hr.bioguide_id);
+          reps.push(bundleRepToRep(hr));
+        }
+      }
+    }
+
+    return { reps, ambiguous };
+  }
+
+  function bundleRepToRep(r: BundleRep & { bioguide_id: string }): Rep {
+    return {
+      bioguide_id: r.bioguide_id,
+      type: r.type,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      party: r.party,
+      state: r.state,
+      district: r.district,
+      phone: r.phone,
+      url: r.url,
+      contact_form: r.contact_form,
+      photo_url: r.photo_url,
+      office: r.office,
+    };
+  }
+
+  // --- Zip search (instant from bundle) ---
+  async function searchZip(zip: string) {
     currentZip = zip;
-    loadingDiv.classList.remove("hidden");
     resultsDiv.innerHTML = "";
     errorDiv.classList.add("hidden");
     noResultsDiv.classList.add("hidden");
@@ -115,32 +223,64 @@ import Layout from "../layouts/Layout.astro";
     addressInput.value = "";
     addressError.classList.add("hidden");
 
-    try {
-      const res = await fetch(`/api/reps?zip=${zip}`);
-      const data = await res.json();
+    if (bundleError) {
+      showError("Representative data failed to load. Please refresh the page.");
+      return;
+    }
 
-      if (!res.ok) {
-        showError(data.error || "An error occurred.");
-        return;
-      }
-
-      if (data.ambiguous) {
-        ambiguousNotice.classList.remove("hidden");
-      }
-
-      if (!data.representatives?.length) {
-        noResultsDiv.classList.remove("hidden");
-        return;
-      }
-
-      renderReps(data.representatives);
-    } catch (err) {
-      showError("Failed to look up representatives. Please try again.");
-    } finally {
+    // If bundle isn't loaded yet, show loading briefly
+    if (!bundle) {
+      loadingDiv.classList.remove("hidden");
+      await bundleReady;
       loadingDiv.classList.add("hidden");
+    }
+
+    if (!bundle) {
+      showError("Representative data failed to load. Please refresh the page.");
+      return;
+    }
+
+    const result = lookupZip(bundle, zip);
+
+    if (result.ambiguous) {
+      ambiguousNotice.classList.remove("hidden");
+    }
+
+    if (result.reps.length === 0) {
+      noResultsDiv.classList.remove("hidden");
+      return;
+    }
+
+    renderReps(result.reps);
+  }
+
+  // --- As-you-type: trigger on 5 digits ---
+  input.addEventListener("input", () => {
+    const val = input.value.replace(/\D/g, "");
+    input.value = val; // strip non-digits
+    if (val.length === 5) {
+      searchZip(val);
+    } else {
+      // Clear results when input changes away from 5 digits
+      resultsDiv.innerHTML = "";
+      errorDiv.classList.add("hidden");
+      noResultsDiv.classList.add("hidden");
+      ambiguousNotice.classList.add("hidden");
     }
   });
 
+  // --- Form submit (button / Enter) ---
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const zip = input.value.trim();
+    if (!/^\d{5}$/.test(zip)) {
+      showError("Please enter a valid 5-digit zip code.");
+      return;
+    }
+    searchZip(zip);
+  });
+
+  // --- Address refinement (still hits API) ---
   addressForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const street = addressInput.value.trim();
@@ -151,7 +291,6 @@ import Layout from "../layouts/Layout.astro";
     resultsDiv.innerHTML = "";
     noResultsDiv.classList.add("hidden");
 
-    // Append zip to address for better geocoding accuracy
     const fullAddress = currentZip ? `${street}, ${currentZip}` : street;
 
     try {
@@ -163,8 +302,7 @@ import Layout from "../layouts/Layout.astro";
       if (!res.ok) {
         addressError.textContent = data.error || "Geocoding failed.";
         addressError.classList.remove("hidden");
-        // Re-fetch zip results as fallback
-        await fallbackToZip();
+        fallbackToZip();
         return;
       }
 
@@ -172,32 +310,28 @@ import Layout from "../layouts/Layout.astro";
         addressError.textContent =
           "Could not match address. Showing all possible representatives.";
         addressError.classList.remove("hidden");
-        await fallbackToZip();
+        fallbackToZip();
         return;
       }
 
-      // Success — hide ambiguous notice and show precise results
       ambiguousNotice.classList.add("hidden");
       renderReps(data.representatives);
     } catch (err) {
       addressError.textContent =
         "Address lookup failed. Showing all possible representatives.";
       addressError.classList.remove("hidden");
-      await fallbackToZip();
+      fallbackToZip();
     } finally {
       loadingDiv.classList.add("hidden");
     }
   });
 
-  async function fallbackToZip() {
-    if (!currentZip) return;
-    try {
-      const res = await fetch(`/api/reps?zip=${currentZip}`);
-      const data = await res.json();
-      if (data.representatives?.length) {
-        renderReps(data.representatives);
-      }
-    } catch {}
+  function fallbackToZip() {
+    if (!currentZip || !bundle) return;
+    const result = lookupZip(bundle, currentZip);
+    if (result.reps.length > 0) {
+      renderReps(result.reps);
+    }
   }
 
   function esc(s: string): string {

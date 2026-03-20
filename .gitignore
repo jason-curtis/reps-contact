@@ -6,6 +6,7 @@ dist/
 .beads/
 .runtime/
 .claude/commands/
+public/reps-bundle.json
 
 # Gas Town (added by gt)
 .claude/
