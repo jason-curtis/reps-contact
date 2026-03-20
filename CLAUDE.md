@@ -51,6 +51,16 @@ This project uses gstack skills for development workflow. Available skills:
 
 Use `/browse` exclusively for any web interaction or testing.
 
+## Dev Server
+
+Run the dev server in a tmux session named `devserver` with a window named after the project:
+
+```bash
+tmux new-session -d -s devserver -n repscontact "bash -c 'export PATH=$HOME/.nvm/versions/node/v22.22.1/bin:$HOME/.local/share/pnpm:\$PATH && pnpm dev --host'"
+```
+
+The dev server MUST accept requests to hostname `marvin-wsl` (configured in `astro.config.mjs` via `vite.server.allowedHosts`).
+
 ## Code Style
 
 - Keep it simple — boring, readable code
