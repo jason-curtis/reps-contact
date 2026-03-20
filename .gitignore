@@ -12,3 +12,4 @@ dist/
 .logs/
 __pycache__/
 state.json
+.gstack/
