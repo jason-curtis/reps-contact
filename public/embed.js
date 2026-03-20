@@ -3,7 +3,7 @@
 
   // Auto-detect API base from script src, fallback to production
   var scripts = document.querySelectorAll("script[src]");
-  var API_BASE = "https://reps-contact.pages.dev";
+  var API_BASE = "https://reps-contact.option-zero.workers.dev";
   for (var i = 0; i < scripts.length; i++) {
     if (scripts[i].src.indexOf("embed.js") !== -1) {
       API_BASE = scripts[i].src.replace(/\/embed\.js.*$/, "");
@@ -79,6 +79,12 @@
       });
   }
 
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
   function renderReps(container, reps) {
     reps.sort(function (a, b) {
       if (a.type !== b.type) return a.type === "sen" ? -1 : 1;
@@ -100,15 +106,15 @@
 
         return (
           '<div class="rc-card">' +
-          '<img src="' + photo + '" alt="' + rep.first_name + " " + rep.last_name + '" class="rc-photo" />' +
+          '<img src="' + esc(photo) + '" alt="' + esc(rep.first_name) + " " + esc(rep.last_name) + '" class="rc-photo" />' +
           '<div class="rc-info">' +
-          '<div class="rc-name">' + rep.first_name + " " + rep.last_name + "</div>" +
-          '<div class="rc-role">' + chamber + " &middot; " + district + " &middot; " + rep.party + "</div>" +
+          '<div class="rc-name">' + esc(rep.first_name) + " " + esc(rep.last_name) + "</div>" +
+          '<div class="rc-role">' + esc(chamber) + " &middot; " + esc(district) + " &middot; " + esc(rep.party) + "</div>" +
           (rep.phone
-            ? '<a href="tel:' + rep.phone + '" class="rc-phone">' + rep.phone + "</a>"
+            ? '<a href="tel:' + esc(rep.phone) + '" class="rc-phone">' + esc(rep.phone) + "</a>"
             : "") +
           (rep.url
-            ? '<a href="' + rep.url + '" target="_blank" rel="noopener" class="rc-link">Website</a>'
+            ? '<a href="' + esc(rep.url) + '" target="_blank" rel="noopener" class="rc-link">Website</a>'
             : "") +
           "</div>" +
           "</div>"
