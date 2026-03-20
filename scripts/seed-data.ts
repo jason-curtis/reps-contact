@@ -56,7 +56,7 @@ function generateLegislatorsSql(): string {
     if (!term) continue;
 
     const bioguide = leg.id.bioguide;
-    const photoUrl = `https://theunitedstates.io/images/congress/225x275/${bioguide}.jpg`;
+    const photoUrl = `https://raw.githubusercontent.com/unitedstates/images/gh-pages/congress/225x275/${bioguide}.jpg`;
 
     rows.push(
       `INSERT OR REPLACE INTO representatives (bioguide_id, type, first_name, last_name, party, state, district, phone, url, contact_form, photo_url, office, start_date, end_date) VALUES (` +
@@ -158,7 +158,7 @@ function generateBundle() {
       phone: term.phone ?? null,
       url: term.url ?? null,
       contact_form: term.contact_form ?? null,
-      photo_url: `https://theunitedstates.io/images/congress/225x275/${bioguide}.jpg`,
+      photo_url: `https://raw.githubusercontent.com/unitedstates/images/gh-pages/congress/225x275/${bioguide}.jpg`,
       office: term.office ?? null,
     };
   }
