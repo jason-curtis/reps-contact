@@ -96,7 +96,7 @@
         var chamber = rep.type === "sen" ? "Senator" : "Rep.";
         var photo =
           rep.photo_url ||
-          "https://raw.githubusercontent.com/unitedstates/images/gh-pages/congress/225x275/" +
+          "https://bioguide.congress.gov/photo/" +
             rep.bioguide_id +
             ".jpg";
         var district =
