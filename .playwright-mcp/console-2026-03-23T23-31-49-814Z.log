@@ -1,0 +1,3 @@
+[     668ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:4322/reps-bundle.json:0
+[     669ms] [ERROR] Failed to load reps bundle: Error: Bundle fetch failed: 404
+    at http://localhost:4322/home/jason/code/gt/repscontact/polecats/dementus/repscontact/src/pages/index.astro?astro&type=script&index=0&lang.ts:16:22 @ http://localhost:4322/home/jason/code/gt/repscontact/polecats/dementus/repscontact/src/pages/index.astro?astro&type=script&index=0&lang.ts:25
