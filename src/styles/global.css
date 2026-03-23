@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+@theme {
+  --font-family-display: "Instrument Serif", Georgia, serif;
+  --font-family-body: "DM Sans", system-ui, sans-serif;
+
+  --color-navy-50: #F0F3F8;
+  --color-navy-100: #D9E0ED;
+  --color-navy-200: #B3C1DB;
+  --color-navy-700: #2A3F6B;
+  --color-navy-800: #1F3056;
+  --color-navy-900: #1B2A4A;
+  --color-navy-950: #111B32;
+
+  --color-amber-50: #FFF8EB;
+  --color-amber-100: #FEECC0;
+  --color-amber-500: #D97706;
+  --color-amber-600: #B45309;
+  --color-amber-700: #92400E;
+
+  --color-warm-50: #FAF9F6;
+  --color-warm-100: #F5F3EE;
+  --color-warm-200: #E8E5DD;
+  --color-warm-300: #D4CFC4;
+  --color-warm-500: #8A8279;
+  --color-warm-600: #6B6458;
+  --color-warm-700: #4A453C;
+  --color-warm-800: #3D3830;
+  --color-warm-900: #1A1A1A;
+}

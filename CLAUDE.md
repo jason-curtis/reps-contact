@@ -67,3 +67,10 @@ The dev server MUST accept requests to hostname `marvin-wsl` (configured in `ast
 - Don't over-engineer or add unrequested features
 - Errors should bubble up, not be silently swallowed
 - Use `git -c commit.gpgsign=false` for all commits
+
+## Design System
+
+Always read DESIGN.md before making any visual or UI decisions.
+All font choices, colors, spacing, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.
