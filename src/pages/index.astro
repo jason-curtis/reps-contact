@@ -1,5 +1,9 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { env } from "cloudflare:workers";
+
+const cfEnv = env as unknown as { GOOGLE_MAPS_API_KEY?: string };
+const googleMapsApiKey = cfEnv.GOOGLE_MAPS_API_KEY ?? "";
 ---
 
 <Layout title="Find Your Representatives | reps-contact">
@@ -53,8 +57,9 @@ import Layout from "../layouts/Layout.astro";
         <input
           type="text"
           id="address-input"
-          placeholder="123 Main St, City, ST"
+          placeholder="Start typing your address..."
           required
+          autocomplete="off"
           class="flex-1 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         />
         <button
@@ -84,9 +89,13 @@ import Layout from "../layouts/Layout.astro";
       <a href="/docs" class="text-blue-600 hover:underline">API Docs</a>
     </p>
   </footer>
+
+  <span id="maps-config" data-key={googleMapsApiKey} class="hidden"></span>
 </Layout>
 
 <script>
+  declare var google: any;
+
   const form = document.getElementById("zip-form") as HTMLFormElement;
   const input = document.getElementById("zip-input") as HTMLInputElement;
   const resultsDiv = document.getElementById("results")!;
@@ -99,6 +108,7 @@ import Layout from "../layouts/Layout.astro";
   const addressError = document.getElementById("address-error")!;
 
   let currentZip = "";
+  let placeJustSelected = false;
 
   // --- Bundle types ---
   interface BundleRep {
@@ -285,9 +295,95 @@ import Layout from "../layouts/Layout.astro";
     searchZip(zip);
   });
 
-  // --- Address refinement (still hits API) ---
+  // --- Google Places Autocomplete ---
+  function initGooglePlaces() {
+    const apiKey = document.getElementById("maps-config")?.dataset.key;
+    if (!apiKey) return;
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+    script.async = true;
+    script.onload = setupAutocomplete;
+    script.onerror = () => console.warn("Google Maps API failed to load");
+    document.head.appendChild(script);
+  }
+
+  function setupAutocomplete() {
+    if (typeof google === "undefined" || !google.maps?.places) return;
+
+    const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+      componentRestrictions: { country: "us" },
+      types: ["address"],
+      fields: ["address_components", "geometry"],
+    });
+
+    autocomplete.addListener("place_changed", () => {
+      const place = autocomplete.getPlace();
+      if (!place.geometry?.location) return;
+
+      placeJustSelected = true;
+      setTimeout(() => { placeJustSelected = false; }, 300);
+
+      const lat: number = place.geometry.location.lat();
+      const lng: number = place.geometry.location.lng();
+
+      // Try extracting zip from place and doing client-side lookup
+      const zipComponent = place.address_components?.find(
+        (c: any) => c.types.includes("postal_code")
+      );
+      const placeZip: string | undefined = zipComponent?.short_name;
+
+      if (placeZip && bundle) {
+        const result = lookupZip(bundle, placeZip);
+        if (!result.ambiguous && result.reps.length > 0) {
+          ambiguousNotice.classList.add("hidden");
+          renderReps(result.reps);
+          return;
+        }
+      }
+
+      // Fall back to lat/lng API lookup for exact district
+      refineByLatLng(lat, lng);
+    });
+  }
+
+  async function refineByLatLng(lat: number, lng: number) {
+    addressError.classList.add("hidden");
+    loadingDiv.classList.remove("hidden");
+    resultsDiv.innerHTML = "";
+    noResultsDiv.classList.add("hidden");
+
+    try {
+      const res = await fetch(`/api/reps?lat=${lat}&lng=${lng}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.representatives?.length) {
+        addressError.textContent =
+          "Could not determine your exact district. Showing all possible representatives.";
+        addressError.classList.remove("hidden");
+        fallbackToZip();
+        return;
+      }
+
+      ambiguousNotice.classList.add("hidden");
+      renderReps(data.representatives);
+    } catch {
+      addressError.textContent =
+        "Address lookup failed. Showing all possible representatives.";
+      addressError.classList.remove("hidden");
+      fallbackToZip();
+    } finally {
+      loadingDiv.classList.add("hidden");
+    }
+  }
+
+  // --- Address form submit (fallback for Census API geocoding) ---
   addressForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    // Skip if Google Places just handled a selection (avoids double processing)
+    if (placeJustSelected) return;
+
     const street = addressInput.value.trim();
     if (!street) return;
 
@@ -321,7 +417,7 @@ import Layout from "../layouts/Layout.astro";
 
       ambiguousNotice.classList.add("hidden");
       renderReps(data.representatives);
-    } catch (err) {
+    } catch {
       addressError.textContent =
         "Address lookup failed. Showing all possible representatives.";
       addressError.classList.remove("hidden");
@@ -452,4 +548,7 @@ import Layout from "../layouts/Layout.astro";
       `;
     }).join("");
   }
+
+  // --- Initialize Google Places ---
+  initGooglePlaces();
 </script>

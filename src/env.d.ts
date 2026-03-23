@@ -7,5 +7,6 @@ declare module "cloudflare:workers" {
     DB: D1Database;
     SESSION: KVNamespace;
     ASSETS: Fetcher;
+    GOOGLE_MAPS_API_KEY?: string;
   };
 }
