@@ -215,9 +215,12 @@ import Layout from "../layouts/Layout.astro";
     };
   }
 
+  const STORAGE_KEY = "repscontact-zip";
+
   // --- Zip search (instant from bundle) ---
   async function searchZip(zip: string) {
     currentZip = zip;
+    try { localStorage.setItem(STORAGE_KEY, zip); } catch {}
     resultsDiv.innerHTML = "";
     errorDiv.classList.add("hidden");
     noResultsDiv.classList.add("hidden");
@@ -362,6 +365,15 @@ import Layout from "../layouts/Layout.astro";
     photo_url: string | null;
     office: string | null;
   }
+
+  // --- Restore last zip on page load ---
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved && /^\d{5}$/.test(saved)) {
+      input.value = saved;
+      searchZip(saved);
+    }
+  } catch {}
 
   function renderReps(reps: Rep[]) {
     // Sort: senators first, then house reps
