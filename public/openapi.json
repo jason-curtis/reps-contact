@@ -1,0 +1,232 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "reps-contact API",
+    "description": "Look up US congressional representatives by zip code, coordinates, or street address.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://reps-contact.option-zero.workers.dev",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:4321",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/api/reps": {
+      "get": {
+        "operationId": "lookupReps",
+        "summary": "Look up representatives",
+        "description": "Find congressional representatives by zip code, geographic coordinates, or street address. Exactly one lookup method must be provided.",
+        "parameters": [
+          {
+            "name": "zip",
+            "in": "query",
+            "description": "5-digit US zip code",
+            "schema": { "type": "string", "pattern": "^\\d{5}$" },
+            "example": "98101"
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude (-90 to 90). Must be used with `lng`.",
+            "schema": { "type": "number", "minimum": -90, "maximum": 90 },
+            "example": 38.9072
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "description": "Longitude (-180 to 180). Must be used with `lat`.",
+            "schema": { "type": "number", "minimum": -180, "maximum": 180 },
+            "example": -77.0369
+          },
+          {
+            "name": "address",
+            "in": "query",
+            "description": "Street address (minimum 5 characters). Uses Census geocoding to resolve the congressional district.",
+            "schema": { "type": "string", "minLength": 5 },
+            "example": "1600 Pennsylvania Ave NW, Washington, DC 20500"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Representatives found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LookupResult" },
+                "example": {
+                  "zip": "98101",
+                  "representatives": [
+                    {
+                      "bioguide_id": "C000127",
+                      "type": "sen",
+                      "first_name": "Maria",
+                      "last_name": "Cantwell",
+                      "party": "Democrat",
+                      "state": "WA",
+                      "district": null,
+                      "phone": "202-224-3441",
+                      "url": "https://www.cantwell.senate.gov",
+                      "contact_form": "https://www.cantwell.senate.gov/public/index.cfm/email-maria",
+                      "photo_url": null,
+                      "office": "511 Hart Senate Office Building",
+                      "start_date": "2025-01-03",
+                      "end_date": "2031-01-03"
+                    }
+                  ],
+                  "ambiguous": false,
+                  "districts": [{ "state": "WA", "district": 7 }]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or missing parameters",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "examples": {
+                  "missingParams": {
+                    "summary": "No parameters provided",
+                    "value": { "error": "Provide ?zip=XXXXX, ?lat=XX&lng=XX, or ?address=... query parameters." }
+                  },
+                  "badZip": {
+                    "summary": "Invalid zip code",
+                    "value": { "error": "Invalid zip code. Must be 5 digits." }
+                  },
+                  "badLatLng": {
+                    "summary": "Invalid coordinates",
+                    "value": { "error": "Invalid lat/lng values." }
+                  },
+                  "shortAddress": {
+                    "summary": "Address too short",
+                    "value": { "error": "Address is too short." }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reps/{bioguideId}": {
+      "get": {
+        "operationId": "getRepById",
+        "summary": "Get a representative by ID",
+        "description": "Retrieve a single representative by their Bioguide ID (e.g. `C000127`).",
+        "parameters": [
+          {
+            "name": "bioguideId",
+            "in": "path",
+            "required": true,
+            "description": "The Bioguide ID of the representative",
+            "schema": { "type": "string" },
+            "example": "C000127"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Representative found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Representative" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing bioguideId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "bioguideId is required" }
+              }
+            }
+          },
+          "404": {
+            "description": "Representative not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Representative not found" }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Representative": {
+        "type": "object",
+        "properties": {
+          "bioguide_id": { "type": "string", "description": "Unique Bioguide identifier" },
+          "type": { "type": "string", "enum": ["sen", "rep"], "description": "`sen` for senator, `rep` for house representative" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "party": { "type": "string", "description": "Political party (e.g. Democrat, Republican, Independent)" },
+          "state": { "type": "string", "description": "Two-letter state code" },
+          "district": { "type": "integer", "nullable": true, "description": "Congressional district number (null for senators)" },
+          "phone": { "type": "string", "nullable": true, "description": "DC office phone number" },
+          "url": { "type": "string", "nullable": true, "description": "Official website URL" },
+          "contact_form": { "type": "string", "nullable": true, "description": "URL to online contact form" },
+          "photo_url": { "type": "string", "nullable": true, "description": "Official photo URL" },
+          "office": { "type": "string", "nullable": true, "description": "DC office address" },
+          "start_date": { "type": "string", "nullable": true, "description": "Term start date (YYYY-MM-DD)" },
+          "end_date": { "type": "string", "nullable": true, "description": "Term end date (YYYY-MM-DD)" }
+        },
+        "required": ["bioguide_id", "type", "first_name", "last_name", "party", "state"]
+      },
+      "LookupResult": {
+        "type": "object",
+        "properties": {
+          "zip": { "type": "string", "description": "The zip code used for lookup" },
+          "representatives": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Representative" }
+          },
+          "ambiguous": { "type": "boolean", "description": "True when a zip code spans multiple congressional districts" },
+          "districts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "state": { "type": "string" },
+                "district": { "type": "integer" }
+              },
+              "required": ["state", "district"]
+            },
+            "description": "Congressional districts matching the lookup"
+          }
+        },
+        "required": ["zip", "representatives", "ambiguous", "districts"]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "description": "Error message" }
+        },
+        "required": ["error"]
+      }
+    }
+  }
+}
