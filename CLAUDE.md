@@ -51,15 +51,25 @@ This project uses gstack skills for development workflow. Available skills:
 
 Use `/browse` exclusively for any web interaction or testing.
 
-## Dev Server
+## Dev Server (crew members only)
 
-Run the dev server in a tmux session named `devserver` with a window named after the project:
+Crew members run the dev server in a shared tmux session on the **default** socket
+(not the Gas Town socket). GT agents run inside a separate tmux socket, so you
+must explicitly target the default one:
 
 ```bash
-tmux new-session -d -s devserver -n repscontact "bash -c 'export PATH=$HOME/.nvm/versions/node/v22.22.1/bin:$HOME/.local/share/pnpm:\$PATH && pnpm dev --host'"
+tmux -L default new-session -d -s devserver -n repscontact \
+  "bash -c 'export PATH=$HOME/.nvm/versions/node/v22.22.1/bin:$HOME/.local/share/pnpm:\$PATH && pnpm dev --host --port 4322'" \
+  2>/dev/null || \
+tmux -L default new-window -t devserver -n repscontact \
+  "bash -c 'export PATH=$HOME/.nvm/versions/node/v22.22.1/bin:$HOME/.local/share/pnpm:\$PATH && pnpm dev --host --port 4322'"
 ```
 
+The dev server runs on **port 4322** (not 4321, which is used by MCL).
 The dev server MUST accept requests to hostname `marvin-wsl` (configured in `astro.config.mjs` via `vite.server.allowedHosts`).
+
+**Polecats**: do NOT use the shared devserver. Run your own isolated dev server
+directly in your shell (e.g. `pnpm dev --host --port <unique-port>`).
 
 ## Code Style
 
