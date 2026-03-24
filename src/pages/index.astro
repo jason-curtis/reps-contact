@@ -498,7 +498,7 @@ const googleMapsApiKey = cfEnv.GOOGLE_MAPS_API_KEY ?? "";
           : rep.state;
       const photoSrc =
         rep.photo_url ??
-        `https://bioguide.congress.gov/photo/${rep.bioguide_id}.jpg`;
+        `https://raw.githubusercontent.com/unitedstates/images/gh-pages/congress/225x275/${rep.bioguide_id}.jpg`;
 
       return `
         <div class="overflow-hidden rounded-xl border border-warm-200 bg-white shadow-sm transition-shadow hover:shadow-md border-l-4 ${party.border}">
