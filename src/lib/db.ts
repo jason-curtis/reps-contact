@@ -132,7 +132,7 @@ export async function getRepsByAddress(
   db: D1Database,
   address: string
 ): Promise<LookupResult> {
-  const url = `https://geocoding.geo.census.gov/geocoder/geographies/address?onelineaddress=${encodeURIComponent(address)}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
+  const url = `https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress?address=${encodeURIComponent(address)}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);

@@ -399,7 +399,8 @@ const googleMapsApiKey = cfEnv.GOOGLE_MAPS_API_KEY ?? "";
     resultsDiv.innerHTML = "";
     noResultsDiv.classList.add("hidden");
 
-    const fullAddress = currentZip ? `${street}, ${currentZip}` : street;
+    const hasZip = /\d{5}/.test(street);
+    const fullAddress = currentZip && !hasZip ? `${street}, ${currentZip}` : street;
 
     try {
       const res = await fetch(
